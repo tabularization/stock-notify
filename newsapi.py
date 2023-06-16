@@ -8,8 +8,8 @@ news_api = config.newsapi_api
 def get_news_articles():
     params = {
         "q": config.COMPANY_NAME,
-        "from": day_before_yesterday,
-        "to": yesterday,
+        "from": day_before_yesterday_formatted,
+        "to": yesterday_formatted,
         "sortBy": "popularity",
         "apiKey": news_api
     }

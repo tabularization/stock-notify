@@ -10,23 +10,28 @@ from newsapi import get_news_articles
 intents = discord.Intents.default()
 intents.message_content = True
 
-
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-news_sent = False
+news_sent = True
 
 async def check_price_movement():
-    global news_sent
+    global news_sent 
+    global price_movement_symbol
     
     stock_data = get_stock_data()
-    stock_price_yesterday = float(stock_data['Time Series (Daily)'][yesterday]['5. adjusted close'])
-    stock_price_day_before_yesterday = float(stock_data['Time Series (Daily)'][day_before_yesterday]['5. adjusted close'])
+    stock_price_yesterday = float(stock_data['Time Series (Daily)'][yesterday_formatted]['1. open'])
+    stock_price_day_before_yesterday = float(stock_data['Time Series (Daily)'][day_before_yesterday_formatted]['4. close'])
+    
+    if stock_price_yesterday > stock_price_day_before_yesterday * 1.05:
+        price_movement_symbol = "📈"
+    if stock_price_yesterday < stock_price_day_before_yesterday * 0.95:
+        price_movement_symbol = "📉"
 
-    if not news_sent and (stock_price_yesterday > stock_price_day_before_yesterday * 1.05 or stock_price_yesterday < stock_price_day_before_yesterday * .95):
+    if news_sent and (stock_price_yesterday > stock_price_day_before_yesterday * 1.05 or stock_price_yesterday < stock_price_day_before_yesterday * .95):
         await send_news(stock_price_yesterday, stock_price_day_before_yesterday)
-        news_sent = True
-        await asyncio.sleep(900)  # Delay of 15 minutes
         news_sent = False
+        await asyncio.sleep(86400)  # Delay of 24 hours
+        news_sent = True
 
 async def send_news(stock_price_yesterday, stock_price_day_before_yesterday):
     news_data = get_news_articles()
@@ -38,21 +43,39 @@ async def send_news(stock_price_yesterday, stock_price_day_before_yesterday):
     guild = discord.utils.get(bot.guilds, id=config.GUILD_ID)
     channel = discord.utils.get(guild.text_channels, id=config.CHANNEL_ID)
     for i in range(len(news_data)):
-        message = f"Percentage Change: {round(((stock_price_yesterday - stock_price_day_before_yesterday) / stock_price_day_before_yesterday) * 100, 2)}%\n"
-        message += f"Title: {news_title[i]}\n"
-        message += f"Description: {news_description[i]}\n"
-        message += f"URL: {news_url[i]}"
-        await channel.send(message)
+        embed = discord.Embed(
+            title=news_title[i],
+            description=news_description[i],
+            url = news_url[i],
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Stock", value=f"${config.STOCK}", inline=False)
+        embed.add_field(name=f"{price_movement_symbol} Percentage Change", value=f"{round(((stock_price_yesterday - stock_price_day_before_yesterday) / stock_price_day_before_yesterday) * 100, 2)}%", inline=False)
+        
+        await channel.send(embed=embed)
 
-@tasks.loop(minutes=15)
+@tasks.loop(hours=24)
 async def price_movement_check():
     await check_price_movement()
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}')
-    print('------')
-    await bot.change_presence(activity=discord.Game(name="Tracking the market📈"))
-    price_movement_check.start()
+    if market_open:
+        print(f'Logged in as {bot.user.name}')
+        print('------')
+        await bot.change_presence(activity=discord.Game(name="Market is opened 🔓"))
+        price_movement_check.start()
+    else:
+        print(f'Logged in as {bot.user.name}')
+        print('------')
+        await bot.change_presence(activity=discord.Game(name="Market is closed 🔒"))
+        embed = discord.Embed(
+            title="Market is closed on weekends.",
+            color=discord.Color.green()
+        )
+        guild = bot.get_guild(config.GUILD_ID)
+        channel = bot.get_channel(config.CHANNEL_ID)
+        await channel.send(embed=embed)
+        await bot.close()
 
 bot.run(config.TOKEN)
