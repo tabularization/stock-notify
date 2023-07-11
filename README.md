@@ -9,8 +9,6 @@ The Discord Stock Market Bot is a feature-rich bot designed to keep you informed
 - Fetch top news articles related to the stocks
 - Easy integration with Discord servers
 
-![carvana](https://github.com/tabularization/discord-stock-news-bot/assets/127825421/20e7d9f2-ca82-4659-95a7-282c0ccc4794)
-
 ## Setup and Usage
 1. Clone the repository
 2. Install the required dependencies

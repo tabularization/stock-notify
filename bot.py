@@ -1,42 +1,34 @@
 import discord
+from discord.ext import commands
 import config
-import asyncio
-from discord.ext import commands, tasks
-from date import *
-from alphavantage import get_stock_data
-from newsapi import get_news_articles
+from alphavantage import *
 
 # Initialize the Discord bot
-intents = discord.Intents.default()
-intents.message_content = True
-
-bot = commands.Bot(command_prefix='!', intents=intents)
-
-news_sent = True
-
+bot = commands.Bot(command_prefix='/', intents=discord.Intents.all())
 async def check_price_movement():
-    global news_sent 
-    global price_movement_symbol
-    
     stock_data = get_stock_data()
-    stock_price_yesterday = float(stock_data['Time Series (Daily)'][yesterday_formatted]['1. open'])
-    stock_price_day_before_yesterday = float(stock_data['Time Series (Daily)'][day_before_yesterday_formatted]['4. close'])
-    
-    if stock_price_yesterday > stock_price_day_before_yesterday * 1.05:
-        price_movement_symbol = "📈"
-    if stock_price_yesterday < stock_price_day_before_yesterday * 0.95:
-        price_movement_symbol = "📉"
+    open_price = float(stock_data['02. open'])  
+    high_price = float(stock_data['03. high'])
+    low_price = float(stock_data['04. low'])
+    price_today= float(stock_data['05. price'])
+    volume = int(stock_data['06. volume'])
+    price_change = float(stock_data['09. change'])  
+    percent_change = stock_data['10. change percent']
+    await send_news(open_price, high_price, low_price, price_today, volume, price_change, percent_change)
 
-    if news_sent and (stock_price_yesterday > stock_price_day_before_yesterday * 1.05 or stock_price_yesterday < stock_price_day_before_yesterday * .95):
-        await send_news(stock_price_yesterday, stock_price_day_before_yesterday)
-        news_sent = False
-        await asyncio.sleep(86400)  # Delay of 24 hours
-        news_sent = True
-
-async def send_news(stock_price_yesterday, stock_price_day_before_yesterday):
-    news_data = get_news_articles()
+async def get_sentiment(price_change):
+    global sign
+    if price_change < 0:
+        sign = "Decrease of"
+        return discord.Color.red()
+    sign = "Increase of"
+    return discord.Color.green()
+ 
+async def send_news(open_price, high_price, low_price, price_today, volume, price_change, percent_change): # VOLUME AND PRICE_TODAY WAS CHANGED
+    # Retrieve news data
+    news_data = get_news()
     news_title = [article['title'] for article in news_data]
-    news_description = [article['description'] for article in news_data]
+    news_sentiment = [article['overall_sentiment_label'] for article in news_data]
     news_url = [article['url'] for article in news_data]
 
     # Send news articles as messages
@@ -45,37 +37,39 @@ async def send_news(stock_price_yesterday, stock_price_day_before_yesterday):
     for i in range(len(news_data)):
         embed = discord.Embed(
             title=news_title[i],
-            description=news_description[i],
             url = news_url[i],
-            color=discord.Color.green()
+            color = await get_sentiment(price_change)
         )
-        embed.add_field(name="Stock", value=f"${config.STOCK}", inline=False)
-        embed.add_field(name=f"{price_movement_symbol} Percentage Change", value=f"{round(((stock_price_yesterday - stock_price_day_before_yesterday) / stock_price_day_before_yesterday) * 100, 2)}%", inline=False)
-        
+        embed.add_field(name="Stock", value=f"${get_stock_symbol().upper()}", inline=False)
+        embed.add_field(name="Open Price", value=f"${open_price}", inline=True)
+        embed.add_field(name="High Price", value=f"${high_price}", inline=True)
+        embed.add_field(name="Low Price", value=f"${low_price}", inline=True)
+        embed.add_field(name="Close Price", value=f"${price_today}", inline=True)
+        embed.add_field(name="Volume", value=f"{volume} shares traded", inline=True)
+        embed.add_field(name=f"{sign}", value=f"${price_change}", inline=True)
+        embed.add_field(name="Percent Change", value=percent_change, inline=True)
+        embed.add_field(name="Market Sentiment", value=f"{news_sentiment[i]}", inline=True)
         await channel.send(embed=embed)
-
-@tasks.loop(hours=24)
-async def price_movement_check():
-    await check_price_movement()
 
 @bot.event
 async def on_ready():
-    if market_open:
         print(f'Logged in as {bot.user.name}')
-        print('------')
-        await bot.change_presence(activity=discord.Game(name="Market is opened 🔓"))
-        price_movement_check.start()
-    else:
-        print(f'Logged in as {bot.user.name}')
-        print('------')
-        await bot.change_presence(activity=discord.Game(name="Market is closed 🔒"))
-        embed = discord.Embed(
-            title="Market is closed on weekends.",
-            color=discord.Color.green()
-        )
-        guild = bot.get_guild(config.GUILD_ID)
-        channel = bot.get_channel(config.CHANNEL_ID)
-        await channel.send(embed=embed)
-        await bot.close()
+        await bot.change_presence(activity=discord.Game(name="Cooking 🧑‍🍳"))
+        await bot.tree.sync()
+
+@bot.tree.command(name="stock-alert")
+async def stock_alert(ctx, ticker: str, article_limit: int):
+    await ctx.response.send_message(f"Processing your request...", ephemeral=True)  
+    with open('config.py', 'r') as file:
+        lines = file.readlines()
+    for i in range(len(lines)):
+        if 'STOCK' in lines[i]:
+            lines[i] = 'STOCK = "{}"\n'.format(ticker)
+        if 'LIMIT' in lines[i]:
+            lines[i] = 'LIMIT = {}\n'.format((article_limit))
+            break
+    with open('config.py', 'w') as file:
+        file.writelines(lines)
+    await check_price_movement()
 
 bot.run(config.TOKEN)
