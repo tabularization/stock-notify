@@ -24,6 +24,10 @@ Interact with the bot using commands:
 
 ![bot](https://github.com/tabularization/discord-stock-news-bot/assets/127825421/20ddfc95-0b13-494d-80a1-30fdc22aedd1)
 
+Click the title of the message to be redirected to the article website
+
+![news](https://github.com/tabularization/stock-notify/assets/127825421/041d56a4-4750-449d-b2d0-e6f1776afc24)
+
 *Stock:Losers sample*
 
 ![LLY](https://github.com/tabularization/discord-stock-news-bot/assets/127825421/4e917e72-9a95-422f-baed-fdafe3493909)
